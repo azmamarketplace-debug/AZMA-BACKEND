@@ -7,7 +7,7 @@ const axios =
   require("axios");
 
 const db =
-  require("./db");
+  require("../config/db");
 
 
 /* =========================================================

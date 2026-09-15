@@ -1,7 +1,7 @@
 const router = require("express").Router();
 
 const db =
-  require("../db");
+  require("../config/db");
 
 const {
   verifyAdmin,
