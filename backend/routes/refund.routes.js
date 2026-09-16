@@ -672,7 +672,7 @@ router.post(
  * =========================================================
  */
 const REFUND_LOCK_NAME =
-  "charcoal_marketplace_refund";
+  "azma_marketplace_refund";
 
 router.post(
   "/admin/:id/process",
@@ -864,7 +864,7 @@ router.post(
         const payment = await createA2UPayment({
           uid: String(order.buyer_pi_uid),
           amount,
-          memo: `Charcoal Marketplace refund for order #${orderId}`,
+          memo: `Azma Marketplace refund for order #${orderId}`,
           metadata: {
             type: "order_refund",
             order_id: String(orderId),
