@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "=========================================="
-echo "🚀 CHARCOAL MARKETPLACE SETUP"
+echo "🚀 AZMA MARKETPLACE SETUP"
 echo "=========================================="
 
 set -e
@@ -14,7 +14,7 @@ echo "🔍 Checking project..."
 
 if [ ! -f "package.json" ]; then
     echo "❌ package.json not found."
-    echo "Please run this script from the Charcoal-Marketplace folder."
+    echo "Please run this script from the Azma-Marketplace folder."
     exit 1
 fi
 
@@ -133,7 +133,7 @@ echo "🎉 SETUP COMPLETE"
 echo "=========================================="
 
 echo ""
-echo "🚀 Starting Charcoal Marketplace..."
+echo "🚀 Starting Azma Marketplace..."
 echo ""
 
 node server.js
