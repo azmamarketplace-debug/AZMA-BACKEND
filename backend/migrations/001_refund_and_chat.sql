@@ -1,18 +1,6 @@
 /* =========================================================
-   CHARCOAL MARKETPLACE
+   AZMA MARKETPLACE
    REFUND + ADMIN CHAT MIGRATION
-   =========================================================
-
-   This migration:
-   1. Extends orders with refund/cancellation tracking.
-   2. Creates support conversations.
-   3. Creates support messages.
-   4. Adds indexes for fast admin/buyer/vendor chat access.
-
-   IMPORTANT:
-   - Does NOT drop existing tables.
-   - Does NOT delete existing orders/payments.
-   - Safe to run against the existing database.
 ========================================================= */
 
 USE railway;
@@ -23,228 +11,402 @@ USE railway;
 ========================================================= */
 
 
-/* ---------------------------------------------------------
-   REFUND STATUS
-
-   pending:
-   Refund has been requested / cancellation completed.
-
-   processing:
-   Admin/backend is currently processing A2U refund.
-
-   completed:
-   Pi refund successfully sent to buyer.
-
-   failed:
-   Refund attempt failed and requires attention.
-
-   cancelled:
-   Refund process was cancelled by Admin.
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_status
-ENUM(
-    'none',
-    'pending',
-    'processing',
-    'completed',
-    'failed',
-    'cancelled'
-)
-NOT NULL DEFAULT 'none'
-AFTER refund_reason;
-
-
-/* ---------------------------------------------------------
-   WHO REQUESTED / INITIATED THE REFUND
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_requested_by
-BIGINT UNSIGNED NULL
-AFTER refund_status;
-
-
-/* ---------------------------------------------------------
-   WHEN REFUND WAS REQUESTED
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_requested_at
-DATETIME NULL
-AFTER refund_requested_by;
-
-
-/* ---------------------------------------------------------
-   ADMIN WHO PROCESSED THE REFUND
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_processed_by
-BIGINT UNSIGNED NULL
-AFTER refund_requested_at;
-
-
-/* ---------------------------------------------------------
-   WHEN REFUND WAS PROCESSED
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_processed_at
-DATETIME NULL
-AFTER refund_processed_by;
-
-
-/* ---------------------------------------------------------
-   PI A2U REFUND PAYMENT ID
-
-   This stores the Pi payment ID created by the
-   backend for the buyer's refund.
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_payment_id
-VARCHAR(255) NULL
-AFTER refund_processed_at;
-
-
-/* ---------------------------------------------------------
-   PI BLOCKCHAIN TRANSACTION ID FOR REFUND
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_txid
-VARCHAR(255) NULL
-AFTER refund_payment_id;
-
-
-/* ---------------------------------------------------------
-   REFUND FAILURE MESSAGE
-
-   Useful when an A2U refund fails.
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS refund_error
-TEXT NULL
-AFTER refund_txid;
-
-
-/* ---------------------------------------------------------
-   CANCELLATION INITIATED BY
-
-   buyer
-   vendor
-   admin
-   system
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS cancelled_by
-ENUM(
-    'buyer',
-    'vendor',
-    'admin',
-    'system'
-)
-NULL
-AFTER cancellation_reason;
-
-
-/* ---------------------------------------------------------
-   CANCELLATION REVIEW TIME
---------------------------------------------------------- */
-
-ALTER TABLE orders
-
-ADD COLUMN IF NOT EXISTS cancellation_requested_at
-DATETIME NULL
-AFTER cancelled_by;
-
-
 /* =========================================================
-   2. INDEXES FOR REFUND MANAGEMENT
+   TEMPORARY PROCEDURE FOR MYSQL-COMPATIBLE COLUMN MIGRATION
 ========================================================= */
 
-ALTER TABLE orders
+DROP PROCEDURE IF EXISTS azma_refund_order_columns;
 
-ADD INDEX idx_orders_refund_status
-(refund_status);
+DELIMITER $$
 
-ALTER TABLE orders
+CREATE PROCEDURE azma_refund_order_columns()
+BEGIN
 
-ADD INDEX idx_orders_refund_payment
-(refund_payment_id);
-
-ALTER TABLE orders
-
-ADD INDEX idx_orders_refund_requested_by
-(refund_requested_by);
-
-ALTER TABLE orders
-
-ADD INDEX idx_orders_refund_processed_by
-(refund_processed_by);
+    DECLARE v_exists INT DEFAULT 0;
 
 
-/* =========================================================
-   3. REFUND FOREIGN KEYS
-========================================================= */
+    /* ---------------------------------------------------------
+       REFUND STATUS
+    --------------------------------------------------------- */
 
-ALTER TABLE orders
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_status';
 
-ADD CONSTRAINT fk_orders_refund_requested_by
+    IF v_exists = 0 THEN
 
-FOREIGN KEY (refund_requested_by)
+        ALTER TABLE orders
+        ADD COLUMN refund_status
+        ENUM(
+            'none',
+            'pending',
+            'processing',
+            'completed',
+            'failed',
+            'cancelled'
+        )
+        NOT NULL DEFAULT 'none'
+        AFTER refund_reason;
 
-REFERENCES users(id)
-
-ON DELETE SET NULL
-
-ON UPDATE CASCADE;
+    END IF;
 
 
-ALTER TABLE orders
+    /* ---------------------------------------------------------
+       WHO REQUESTED / INITIATED THE REFUND
+    --------------------------------------------------------- */
 
-ADD CONSTRAINT fk_orders_refund_processed_by
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_requested_by';
 
-FOREIGN KEY (refund_processed_by)
+    IF v_exists = 0 THEN
 
-REFERENCES users(id)
+        ALTER TABLE orders
+        ADD COLUMN refund_requested_by
+        BIGINT UNSIGNED NULL
+        AFTER refund_status;
 
-ON DELETE SET NULL
+    END IF;
 
-ON UPDATE CASCADE;
+
+    /* ---------------------------------------------------------
+       WHEN REFUND WAS REQUESTED
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_requested_at';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_requested_at
+        DATETIME NULL
+        AFTER refund_requested_by;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       ADMIN WHO PROCESSED THE REFUND
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_processed_by';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_processed_by
+        BIGINT UNSIGNED NULL
+        AFTER refund_requested_at;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       WHEN REFUND WAS PROCESSED
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_processed_at';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_processed_at
+        DATETIME NULL
+        AFTER refund_processed_by;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       PI A2U REFUND PAYMENT ID
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_payment_id';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_payment_id
+        VARCHAR(255) NULL
+        AFTER refund_processed_at;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       PI BLOCKCHAIN TRANSACTION ID FOR REFUND
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_txid';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_txid
+        VARCHAR(255) NULL
+        AFTER refund_payment_id;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       REFUND FAILURE MESSAGE
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'refund_error';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN refund_error
+        TEXT NULL
+        AFTER refund_txid;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       CANCELLATION INITIATED BY
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'cancelled_by';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN cancelled_by
+        ENUM(
+            'buyer',
+            'vendor',
+            'admin',
+            'system'
+        )
+        NULL
+        AFTER cancellation_reason;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       CANCELLATION REVIEW TIME
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'cancellation_requested_at';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD COLUMN cancellation_requested_at
+        DATETIME NULL
+        AFTER cancelled_by;
+
+    END IF;
+
+
+    /* =========================================================
+       2. INDEXES FOR REFUND MANAGEMENT
+    ========================================================= */
+
+
+    /* ---------------------------------------------------------
+       REFUND STATUS INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND INDEX_NAME = 'idx_orders_refund_status';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD INDEX idx_orders_refund_status
+        (refund_status);
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       REFUND PAYMENT INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND INDEX_NAME = 'idx_orders_refund_payment';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD INDEX idx_orders_refund_payment
+        (refund_payment_id);
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       REFUND REQUESTED BY INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND INDEX_NAME = 'idx_orders_refund_requested_by';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD INDEX idx_orders_refund_requested_by
+        (refund_requested_by);
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       REFUND PROCESSED BY INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND INDEX_NAME = 'idx_orders_refund_processed_by';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+        ADD INDEX idx_orders_refund_processed_by
+        (refund_processed_by);
+
+    END IF;
+
+
+    /* =========================================================
+       3. REFUND FOREIGN KEYS
+    ========================================================= */
+
+
+    /* ---------------------------------------------------------
+       REFUND REQUESTED BY
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+    WHERE CONSTRAINT_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND CONSTRAINT_NAME = 'fk_orders_refund_requested_by'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+
+        ADD CONSTRAINT fk_orders_refund_requested_by
+
+        FOREIGN KEY (refund_requested_by)
+
+        REFERENCES users(id)
+
+        ON DELETE SET NULL
+
+        ON UPDATE CASCADE;
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       REFUND PROCESSED BY
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+    WHERE CONSTRAINT_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND CONSTRAINT_NAME = 'fk_orders_refund_processed_by'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+
+        ADD CONSTRAINT fk_orders_refund_processed_by
+
+        FOREIGN KEY (refund_processed_by)
+
+        REFERENCES users(id)
+
+        ON DELETE SET NULL
+
+        ON UPDATE CASCADE;
+
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+CALL azma_refund_order_columns();
+
+DROP PROCEDURE IF EXISTS azma_refund_order_columns;
 
 
 /* =========================================================
    4. SUPPORT CONVERSATIONS
-=========================================================
-
-   One conversation represents one support case.
-
-   Examples:
-
-   Buyer -> Admin
-   "My order was not delivered."
-
-   Vendor -> Admin
-   "Please release my earnings."
-
-   Buyer -> Admin
-   "Please refund my order."
-
-   Conversation may optionally be connected to an order.
 ========================================================= */
 
 CREATE TABLE IF NOT EXISTS support_conversations (
@@ -261,11 +423,6 @@ CREATE TABLE IF NOT EXISTS support_conversations (
 
     /* =====================================================
        OPTIONAL ORDER
-
-       NULL means general support conversation.
-
-       If supplied, the conversation is connected
-       to a specific order.
     ===================================================== */
 
     order_id BIGINT UNSIGNED NULL,
@@ -273,11 +430,6 @@ CREATE TABLE IF NOT EXISTS support_conversations (
 
     /* =====================================================
        USER TYPE
-
-       buyer / vendor
-
-       Admin is not stored as the primary requester
-       because Admin handles the conversation.
     ===================================================== */
 
     user_type ENUM(
@@ -323,14 +475,11 @@ CREATE TABLE IF NOT EXISTS support_conversations (
 
     last_message_at DATETIME NULL,
 
-
     last_message_by BIGINT UNSIGNED NULL,
 
 
     /* =====================================================
        ADMIN ASSIGNMENT
-
-       NULL = any Admin can handle it.
     ===================================================== */
 
     assigned_admin_id BIGINT UNSIGNED NULL,
@@ -483,12 +632,6 @@ CREATE TABLE IF NOT EXISTS support_messages (
 
     /* =====================================================
        OPTIONAL ATTACHMENT
-
-       We can use this later for:
-       - delivery proof
-       - screenshots
-       - payment evidence
-       - product images
     ===================================================== */
 
     attachment_url VARCHAR(1000) NULL,
@@ -496,11 +639,6 @@ CREATE TABLE IF NOT EXISTS support_messages (
 
     /* =====================================================
        READ STATUS
-
-       Admin messages can remain unread by buyer/vendor
-       until they open the conversation.
-
-       User messages can remain unread by Admin.
     ===================================================== */
 
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
@@ -579,21 +717,6 @@ COLLATE=utf8mb4_unicode_ci;
 
 /* =========================================================
    6. OPTIONAL: REFUND AUDIT LOG
-=========================================================
-
-   This keeps a permanent record of refund actions.
-
-   Example events:
-
-   refund_requested
-   vendor_cancelled
-   refund_processing
-   refund_completed
-   refund_failed
-   refund_cancelled
-
-   This is separate from payment_logs because it represents
-   the BUSINESS refund process, not just a Pi payment event.
 ========================================================= */
 
 CREATE TABLE IF NOT EXISTS refund_logs (
@@ -610,8 +733,6 @@ CREATE TABLE IF NOT EXISTS refund_logs (
 
     /* =====================================================
        ACTOR
-
-       User/Admin who caused the event.
     ===================================================== */
 
     user_id BIGINT UNSIGNED NULL,
@@ -733,4 +854,109 @@ COLLATE=utf8mb4_unicode_ci;
 
 SELECT
     'Refund + Chat database migration completed successfully'
+    AS migration_status;
+
+
+/* =========================================================
+   AZMA MARKETPLACE
+   REFUND + SUPPORT CHAT UPDATE 002
+========================================================= */
+
+USE railway;
+
+
+/* =========================================================
+   UPDATE 002 INDEXES
+========================================================= */
+
+DROP PROCEDURE IF EXISTS azma_refund_chat_update_002;
+
+DELIMITER $$
+
+CREATE PROCEDURE azma_refund_chat_update_002()
+BEGIN
+
+    DECLARE v_exists INT DEFAULT 0;
+
+
+    /* ---------------------------------------------------------
+       ORDERS REFUND CASE INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND INDEX_NAME = 'idx_orders_refund_case';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE orders
+
+        ADD INDEX idx_orders_refund_case
+
+        (refund_status, cancelled_at, refund_requested_at);
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       SUPPORT CONVERSATIONS STATUS/LAST MESSAGE INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'support_conversations'
+      AND INDEX_NAME = 'idx_support_conversations_status_last';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE support_conversations
+
+        ADD INDEX idx_support_conversations_status_last
+
+        (status, last_message_at);
+
+    END IF;
+
+
+    /* ---------------------------------------------------------
+       SUPPORT MESSAGES CONVERSATION/CREATED INDEX
+    --------------------------------------------------------- */
+
+    SELECT COUNT(*)
+    INTO v_exists
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'support_messages'
+      AND INDEX_NAME = 'idx_support_messages_conversation_created';
+
+    IF v_exists = 0 THEN
+
+        ALTER TABLE support_messages
+
+        ADD INDEX idx_support_messages_conversation_created
+
+        (conversation_id, created_at);
+
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+CALL azma_refund_chat_update_002();
+
+DROP PROCEDURE IF EXISTS azma_refund_chat_update_002;
+
+
+/* =========================================================
+   FINAL COMPLETION MESSAGE
+========================================================= */
+
+SELECT
+    'Refund + Support Chat update 002 completed successfully'
     AS migration_status;
