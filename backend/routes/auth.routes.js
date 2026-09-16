@@ -964,26 +964,6 @@ router.post(
 
 
       /* ===================================================
-         ADMIN CANNOT BECOME VENDOR
-      =================================================== */
-
-      if (
-        user.role ===
-        "admin"
-      ) {
-
-        return res.status(403).json({
-
-          success:
-            false,
-
-          message:
-            "Administrator accounts cannot register as vendors"
-        });
-      }
-
-
-      /* ===================================================
          ALREADY APPROVED VENDOR
       =================================================== */
 
