@@ -1142,14 +1142,16 @@ router.post(
           vendorRows[0];
 
 
-        if (
-          vendorAccount.role !==
-            "vendor" ||
-          vendorAccount.status !==
-            "approved" ||
-          vendorAccount.vendor_status !==
-            "approved"
-        ) {
+          if (
+  (
+    vendorAccount.role !== "vendor" &&
+    vendorAccount.role !== "admin"
+  ) ||
+  vendorAccount.status !==
+    "approved" ||
+  vendorAccount.vendor_status !==
+    "approved"
+) {
 
           await connection.rollback();
 
